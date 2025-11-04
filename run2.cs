@@ -96,13 +96,15 @@ class Program
 
             if (gates.Contains(current))
             {
-                if (graph.TryGetValue(current, out var gateConnections) && gateConnections.Count > 0)
+                HashSet<string> gateNeighbors;
+                if (graph.TryGetValue(current, out gateNeighbors) && gateNeighbors.Count > 0)
                     return true;
             }
 
-            if (graph.TryGetValue(current, out var adjNodes))
+            HashSet<string> neighbors;
+            if (graph.TryGetValue(current, out neighbors))
             {
-                foreach (string neighbor in adjNodes)
+                foreach (string neighbor in neighbors)
                 {
                     if (!visited.Contains(neighbor))
                     {
@@ -118,24 +120,28 @@ class Program
     static string GetNextVirusPosition(string startPos, Dictionary<string, HashSet<string>> graph, HashSet<string> gates)
     {
         var distances = new Dictionary<string, int>();
+        var parent = new Dictionary<string, string>();
         var queue = new Queue<string>();
         var visited = new HashSet<string>();
 
         queue.Enqueue(startPos);
         visited.Add(startPos);
         distances[startPos] = 0;
+        parent[startPos] = null;
 
         while (queue.Count > 0)
         {
             string current = queue.Dequeue();
-            if (graph.TryGetValue(current, out var adjNodes))
+            HashSet<string> neighbors;
+            if (graph.TryGetValue(current, out neighbors))
             {
-                foreach (string neighbor in adjNodes)
+                foreach (string neighbor in neighbors)
                 {
                     if (!visited.Contains(neighbor))
                     {
                         visited.Add(neighbor);
                         distances[neighbor] = distances[current] + 1;
+                        parent[neighbor] = current;
                         queue.Enqueue(neighbor);
                     }
                 }
@@ -149,7 +155,8 @@ class Program
         {
             if (distances.ContainsKey(gate))
             {
-                if (!graph.ContainsKey(gate) || graph[gate].Count == 0)
+                HashSet<string> gateNeighbors;
+                if (!graph.TryGetValue(gate, out gateNeighbors) || gateNeighbors.Count == 0)
                     continue;
 
                 int d = distances[gate];
@@ -164,21 +171,23 @@ class Program
         if (targetGate == null)
             return null;
 
-        var candidates = new List<string>();
-
-        if (graph.TryGetValue(startPos, out var startAdj))
+        var pathToStart = new HashSet<string>();
+        string cur = targetGate;
+        while (cur != null)
         {
-            foreach (string neighbor in startAdj)
+            pathToStart.Add(cur);
+            cur = parent.GetValueOrDefault(cur);
+        }
+
+        HashSet<string> startNeighbors;
+        var candidates = new List<string>();
+        if (graph.TryGetValue(startPos, out startNeighbors))
+        {
+            foreach (string neighbor in startNeighbors)
             {
-                if (distances.TryGetValue(neighbor, out int distNeighbor) &&
-                    distNeighbor == distances[startPos] + 1 &&
-                    distances.ContainsKey(targetGate) &&
-                    distNeighbor <= distances[targetGate])
+                if (pathToStart.Contains(neighbor) && distances.TryGetValue(neighbor, out int dist) && dist == 1)
                 {
-                    if (distances[targetGate] - distNeighbor >= 0)
-                    {
-                        candidates.Add(neighbor);
-                    }
+                    candidates.Add(neighbor);
                 }
             }
         }
