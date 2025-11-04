@@ -222,10 +222,10 @@ class Program
 
         while ((line = Console.ReadLine()) != null)
         {
-            if (!string.IsNullOrWhiteSpace(line))
-            {
+ //           if (!string.IsNullOrWhiteSpace(line)) - проверка на пустую строку
+ //           {
                 lines.Add(line);
-            }
+ //           }
         }
 
         int result = Solve(lines);
