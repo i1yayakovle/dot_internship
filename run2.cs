@@ -46,15 +46,19 @@ class Program
             });
 
             string chosenAction = null;
+            string newVirusPos = null;
 
             foreach (var (gate, node) in removable)
             {
                 graph[gate].Remove(node);
                 graph[node].Remove(gate);
 
-                if (!CanReachAnyActiveGate(virusPos, graph, gates))
+                string nextPos = GetNextVirusPosition(virusPos, graph, gates);
+
+                if (nextPos == null || !gates.Contains(nextPos))
                 {
                     chosenAction = $"{gate}-{node}";
+                    newVirusPos = nextPos;
                     break;
                 }
                 else
@@ -70,103 +74,98 @@ class Program
                 chosenAction = $"{first.gate}-{first.node}";
                 graph[first.gate].Remove(first.node);
                 graph[first.node].Remove(first.gate);
+                newVirusPos = GetNextVirusPosition(virusPos, graph, gates);
             }
 
             result.Add(chosenAction);
+            virusPos = newVirusPos;
 
-            virusPos = GetNextVirusPosition(virusPos, graph, gates);
-            if (virusPos == null || gates.Contains(virusPos))
+            if (virusPos == null)
                 break;
         }
 
         return result;
     }
 
-    static bool CanReachAnyActiveGate(string startPos, Dictionary<string, HashSet<string>> graph, HashSet<string> gates)
-    {
-        var visited = new HashSet<string>();
-        var queue = new Queue<string>();
-        queue.Enqueue(startPos);
-        visited.Add(startPos);
-
-        while (queue.Count > 0)
-        {
-            string current = queue.Dequeue();
-
-            if (gates.Contains(current))
-            {
-                if (graph.TryGetValue(current, out var conn) && conn.Count > 0)
-                    return true;
-            }
-
-            if (graph.TryGetValue(current, out var adj))
-            {
-                foreach (string neighbor in adj)
-                {
-                    if (!visited.Contains(neighbor))
-                    {
-                        visited.Add(neighbor);
-                        queue.Enqueue(neighbor);
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
     static string GetNextVirusPosition(string startPos, Dictionary<string, HashSet<string>> graph, HashSet<string> gates)
     {
-        var dist = new Dictionary<string, int>();
+        var distFromStart = new Dictionary<string, int>();
         var queue = new Queue<string>();
         var visited = new HashSet<string>();
-
         queue.Enqueue(startPos);
         visited.Add(startPos);
-        dist[startPos] = 0;
+        distFromStart[startPos] = 0;
 
         while (queue.Count > 0)
         {
             string u = queue.Dequeue();
             if (graph.TryGetValue(u, out var neighbors))
             {
-                foreach (string v in neighbors)
+                foreach (string v in neighbors.OrderBy(x => x, StringComparer.Ordinal))
                 {
                     if (!visited.Contains(v))
                     {
                         visited.Add(v);
-                        dist[v] = dist[u] + 1;
+                        distFromStart[v] = distFromStart[u] + 1;
                         queue.Enqueue(v);
                     }
                 }
             }
         }
 
-        string bestGate = null;
+        string targetGate = null;
         int minDist = int.MaxValue;
         foreach (string gate in gates)
         {
-            if (dist.ContainsKey(gate) && graph.ContainsKey(gate) && graph[gate].Count > 0)
+            if (distFromStart.ContainsKey(gate) && graph.ContainsKey(gate) && graph[gate].Count > 0)
             {
-                int d = dist[gate];
-                if (d < minDist || (d == minDist && string.Compare(gate, bestGate, StringComparison.Ordinal) < 0))
+                if (distFromStart[gate] < minDist ||
+                    (distFromStart[gate] == minDist && string.Compare(gate, targetGate, StringComparison.Ordinal) < 0))
                 {
-                    minDist = d;
-                    bestGate = gate;
+                    minDist = distFromStart[gate];
+                    targetGate = gate;
                 }
             }
         }
 
-        if (bestGate == null)
+        if (targetGate == null)
             return null;
+
+        var distToTarget = new Dictionary<string, int>();
+        var revQueue = new Queue<string>();
+        var revVisited = new HashSet<string>();
+        revQueue.Enqueue(targetGate);
+        revVisited.Add(targetGate);
+        distToTarget[targetGate] = 0;
+
+        while (revQueue.Count > 0)
+        {
+            string u = revQueue.Dequeue();
+            if (graph.TryGetValue(u, out var neighbors))
+            {
+                foreach (string v in neighbors)
+                {
+                    if (!revVisited.Contains(v))
+                    {
+                        revVisited.Add(v);
+                        distToTarget[v] = distToTarget[u] + 1;
+                        revQueue.Enqueue(v);
+                    }
+                }
+            }
+        }
 
         var candidates = new List<string>();
         if (graph.TryGetValue(startPos, out var startNeighbors))
         {
             foreach (string n in startNeighbors)
             {
-                if (dist.TryGetValue(n, out int dN) && dN == dist[startPos] + 1 && dN <= minDist)
+                if (distFromStart.TryGetValue(n, out int d1) && distToTarget.TryGetValue(n, out int d2))
                 {
-                    candidates.Add(n);
+                    if (d1 + d2 == distFromStart[targetGate])
+                    {
+                        candidates.Add(n);
+                    }
                 }
             }
         }
@@ -182,6 +181,7 @@ class Program
     {
         var edges = new List<(string, string)>();
         string line;
+
         while ((line = Console.ReadLine()) != null)
         {
             line = line.Trim();
