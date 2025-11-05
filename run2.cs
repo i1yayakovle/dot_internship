@@ -119,30 +119,33 @@ class Program
 
     static string GetNextVirusPosition(string startPos, Dictionary<string, HashSet<string>> graph, HashSet<string> gates)
     {
-        var distances = new Dictionary<string, int>();
-        var parent = new Dictionary<string, string>();
+        var dist = new Dictionary<string, int>();
+        var parent = new Dictionary<string, List<string>>();
         var queue = new Queue<string>();
         var visited = new HashSet<string>();
 
         queue.Enqueue(startPos);
         visited.Add(startPos);
-        distances[startPos] = 0;
-        parent[startPos] = null;
+        dist[startPos] = 0;
+        parent[startPos] = new List<string>();
 
         while (queue.Count > 0)
         {
-            string current = queue.Dequeue();
-            HashSet<string> neighbors;
-            if (graph.TryGetValue(current, out neighbors))
+            string u = queue.Dequeue();
+            if (graph.TryGetValue(u, out var adjNodes))
             {
-                foreach (string neighbor in neighbors)
+                foreach (string v in adjNodes)
                 {
-                    if (!visited.Contains(neighbor))
+                    if (!visited.Contains(v))
                     {
-                        visited.Add(neighbor);
-                        distances[neighbor] = distances[current] + 1;
-                        parent[neighbor] = current;
-                        queue.Enqueue(neighbor);
+                        visited.Add(v);
+                        dist[v] = dist[u] + 1;
+                        parent[v] = new List<string> { u };
+                        queue.Enqueue(v);
+                    }
+                    else if (dist.ContainsKey(v) && dist[v] == dist[u] + 1)
+                    {
+                        parent[v].Add(u);
                     }
                 }
             }
@@ -150,16 +153,11 @@ class Program
 
         string targetGate = null;
         int minDist = int.MaxValue;
-
         foreach (string gate in gates)
         {
-            if (distances.ContainsKey(gate))
+            if (dist.ContainsKey(gate) && graph.ContainsKey(gate) && graph[gate].Count > 0)
             {
-                HashSet<string> gateNeighbors;
-                if (!graph.TryGetValue(gate, out gateNeighbors) || gateNeighbors.Count == 0)
-                    continue;
-
-                int d = distances[gate];
+                int d = dist[gate];
                 if (d < minDist || (d == minDist && string.Compare(gate, targetGate, StringComparison.Ordinal) < 0))
                 {
                     minDist = d;
@@ -171,23 +169,35 @@ class Program
         if (targetGate == null)
             return null;
 
-        var pathToStart = new HashSet<string>();
-        string cur = targetGate;
-        while (cur != null)
+        var onShortestPath = new HashSet<string>();
+        var pathQueue = new Queue<string>();
+        pathQueue.Enqueue(targetGate);
+        onShortestPath.Add(targetGate);
+
+        while (pathQueue.Count > 0)
         {
-            pathToStart.Add(cur);
-            cur = parent.GetValueOrDefault(cur);
+            string u = pathQueue.Dequeue();
+            if (parent.TryGetValue(u, out var preds))
+            {
+                foreach (string p in preds)
+                {
+                    if (!onShortestPath.Contains(p))
+                    {
+                        onShortestPath.Add(p);
+                        pathQueue.Enqueue(p);
+                    }
+                }
+            }
         }
 
-        HashSet<string> startNeighbors;
         var candidates = new List<string>();
-        if (graph.TryGetValue(startPos, out startNeighbors))
+        if (graph.TryGetValue(startPos, out var neighbors))
         {
-            foreach (string neighbor in startNeighbors)
+            foreach (string n in neighbors)
             {
-                if (pathToStart.Contains(neighbor) && distances.TryGetValue(neighbor, out int dist) && dist == 1)
+                if (onShortestPath.Contains(n))
                 {
-                    candidates.Add(neighbor);
+                    candidates.Add(n);
                 }
             }
         }
