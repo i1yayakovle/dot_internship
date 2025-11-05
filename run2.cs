@@ -25,37 +25,39 @@ class Program
 
         while (true)
         {
-            var activeGates = gates.Where(g => graph.ContainsKey(g) && graph[g].Count > 0).ToList();
-            if (activeGates.Count == 0)
+            var (targetGate, minDist) = FindClosestActiveGate(virusPos, graph, gates);
+            if (targetGate == null)
                 break;
 
-            var removable = new List<(string gate, string node)>();
-            foreach (var gate in activeGates)
+            var candidateRemovals = new List<(string gate, string node)>();
+            if (graph.ContainsKey(targetGate))
             {
-                foreach (var node in graph[gate])
+                foreach (var node in graph[targetGate])
                 {
-                    removable.Add((gate, node));
+                    candidateRemovals.Add((targetGate, node));
                 }
             }
 
-            removable.Sort((x, y) =>
+            candidateRemovals.Sort((x, y) =>
             {
                 int cmp = string.Compare(x.gate, y.gate, StringComparison.Ordinal);
                 return cmp != 0 ? cmp : string.Compare(x.node, y.node, StringComparison.Ordinal);
             });
 
             string chosenAction = null;
+            string newVirusPos = null;
 
-            foreach (var (gate, node) in removable)
+            foreach (var (gate, node) in candidateRemovals)
             {
                 graph[gate].Remove(node);
                 graph[node].Remove(gate);
 
-                bool canReach = CanReachAnyActiveGate(virusPos, graph, gates);
+                string nextPos = GetNextVirusPosition(virusPos, graph, gates);
 
-                if (!canReach)
+                if (nextPos == null || !gates.Contains(nextPos))
                 {
                     chosenAction = $"{gate}-{node}";
+                    newVirusPos = nextPos;
                     break;
                 }
                 else
@@ -67,20 +69,91 @@ class Program
 
             if (chosenAction == null)
             {
-                var first = removable[0];
-                chosenAction = $"{first.gate}-{first.node}";
-                graph[first.gate].Remove(first.node);
-                graph[first.node].Remove(first.gate);
+                var allRemovable = new List<(string gate, string node)>();
+                foreach (var gate in gates.Where(g => graph.ContainsKey(g) && graph[g].Count > 0))
+                {
+                    foreach (var node in graph[gate])
+                    {
+                        allRemovable.Add((gate, node));
+                    }
+                }
+                allRemovable.Sort((x, y) =>
+                {
+                    int cmp = string.Compare(x.gate, y.gate, StringComparison.Ordinal);
+                    return cmp != 0 ? cmp : string.Compare(x.node, y.node, StringComparison.Ordinal);
+                });
+
+                foreach (var (gate, node) in allRemovable)
+                {
+                    graph[gate].Remove(node);
+                    graph[node].Remove(gate);
+
+                    string nextPos = GetNextVirusPosition(virusPos, graph, gates);
+                    if (nextPos == null || !gates.Contains(nextPos))
+                    {
+                        chosenAction = $"{gate}-{node}";
+                        newVirusPos = nextPos;
+                        break;
+                    }
+                    else
+                    {
+                        graph[gate].Add(node);
+                        graph[node].Add(gate);
+                    }
+                }
+            }
+
+            if (chosenAction == null)
+            {
+                break;
             }
 
             result.Add(chosenAction);
-
-            virusPos = GetNextVirusPosition(virusPos, graph, gates);
-            if (virusPos == null || gates.Contains(virusPos))
-                break;
+            virusPos = newVirusPos;
+            if (virusPos == null) break;
         }
 
         return result;
+    }
+
+    static (string gate, int dist) FindClosestActiveGate(string start, Dictionary<string, HashSet<string>> graph, HashSet<string> gates)
+    {
+        var visited = new HashSet<string>();
+        var queue = new Queue<string>();
+        var distance = new Dictionary<string, int>();
+
+        queue.Enqueue(start);
+        visited.Add(start);
+        distance[start] = 0;
+
+        while (queue.Count > 0)
+        {
+            string current = queue.Dequeue();
+            int currentDist = distance[current];
+
+            if (gates.Contains(current))
+            {
+                if (graph.ContainsKey(current) && graph[current].Count > 0)
+                {
+                    return (current, currentDist);
+                }
+            }
+
+            if (graph.TryGetValue(current, out var neighbors))
+            {
+                var sortedNeighbors = neighbors.OrderBy(n => n, StringComparer.Ordinal).ToList();
+                foreach (string neighbor in sortedNeighbors)
+                {
+                    if (!visited.Contains(neighbor))
+                    {
+                        visited.Add(neighbor);
+                        distance[neighbor] = currentDist + 1;
+                        queue.Enqueue(neighbor);
+                    }
+                }
+            }
+        }
+        return (null, -1);
     }
 
     static bool CanReachAnyActiveGate(string startPos, Dictionary<string, HashSet<string>> graph, HashSet<string> gates)
